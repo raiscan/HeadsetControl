@@ -28,14 +28,16 @@
 enum devices
 {
     DEVICE_G930,
-    DEVICE_VOID
+    DEVICE_VOID,
+    DEVICE_VOID_WIRED
 } device_found;
 
-#define VENDOR_LOGITECH 0x046d
-#define PRODUCT_G930    0x0a1f
+#define VENDOR_LOGITECH     0x046d
+#define PRODUCT_G930        0x0a1f
 
-#define VENDOR_CORSAIR  0x1b1c
-#define PRODUCT_VOID    0x1b27
+#define VENDOR_CORSAIR      0x1b1c
+#define PRODUCT_VOID        0x1b27
+#define PRODUCT_VOID_WIRED  0x1b2a
 
 static libusb_device **devices = NULL;
 static libusb_context *usb_context = NULL;
@@ -96,12 +98,22 @@ static libusb_device* find_device()
             device_found = DEVICE_G930;
             break;
         }
-        else if (desc.idVendor == VENDOR_CORSAIR && desc.idProduct == PRODUCT_VOID)
+        else if (desc.idVendor == VENDOR_CORSAIR)
         {
-            r = devices[i];
-            printf("Found Corsair VOID!\n");
-            device_found = DEVICE_VOID;
-            break;
+            if (desc.idProduct == PRODUCT_VOID)
+            {
+                r = devices[i];
+                printf("Found Corsair VOID!\n");
+                device_found = DEVICE_VOID;
+                break;
+            }
+            else if (desc.idProduct == PRODUCT_VOID_WIRED)
+            {
+                r = devices[i];
+                printf("Found Corsair VOID wired!\n");
+                device_found = DEVICE_VOID_WIRED;
+                break;
+            }
         }
     }
 
@@ -190,12 +202,42 @@ void send_sidetone_void(unsigned char num)
     }
 }
 
+void send_sidetone_void_wired(unsigned char num)
+{
+    #ifdef __APPLE__
+    printf("The device probabily doesn't work on Mac, report back on GitHub.\n");
+    #endif
+
+    num = map(num, 0, 128, 0, 255);
+
+    unsigned char data[64] = {0x07, 0x22, 0x05, 0x01, 0x04, 0xff, num, 0x00, 0x03, 0x00, 0xff, 0x00, 0x05, 0xff, num,  0x00, \
+                              0x02, 0xff, num,  0x00, 0x01, 0xff, num, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+    for (int i = 32; i < 64; i++)
+        data[i] = 0;
+
+    int transferred;
+
+    int ret = libusb_interrupt_transfer(device_handle, 0x03, data, 64, &transferred, 1000);
+
+    if (ret == 0)
+    {
+        printf("Set Sidetone successfully! (%d bytes transferred)\n", transferred);
+    }
+    else
+    {
+        printf("Error in transferring data :( %d: %s\n", ret, libusb_error_name(ret));
+    }
+}
+
 void send_sidetone(unsigned char num)
 {
     if (device_found == DEVICE_G930)
         return send_sidetone_g930(num);
     else if (device_found == DEVICE_VOID)
         return send_sidetone_void(num);
+    else if (device_found == DEVICE_VOID_WIRED)
+        return send_sidetone_void_wired(num);
 
     assert(0);
 }
